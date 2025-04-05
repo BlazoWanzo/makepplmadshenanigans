@@ -1,0 +1,155 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+local spinning = false
+local targetPlayer = nil
+local rotation = 0
+local orbitRadius = 3.5
+local spinSpeed = 7
+local bodyGyro, bodyPosition
+
+-- GUI Setup
+local function createGui()
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "TeleportGui"
+	screenGui.ResetOnSpawn = false
+	screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+	local textBox = Instance.new("TextBox")
+	textBox.Size = UDim2.new(0, 200, 0, 40)
+	textBox.Position = UDim2.new(0.5, -100, 0, 50)
+	textBox.PlaceholderText = "Enter player name"
+	textBox.TextScaled = true
+	textBox.ClearTextOnFocus = true
+	textBox.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
+	textBox.TextColor3 = Color3.new(1, 1, 1)
+	textBox.Parent = screenGui
+
+	local stopButton = Instance.new("TextButton")
+	stopButton.Size = UDim2.new(0, 100, 0, 40)
+	stopButton.Position = UDim2.new(0.5, -50, 0, 100)
+	stopButton.Text = "stawp"
+	stopButton.TextScaled = true
+	stopButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+	stopButton.TextColor3 = Color3.new(1, 1, 1)
+	stopButton.Visible = false
+	stopButton.Parent = screenGui
+
+	return textBox, stopButton
+end
+
+local textBox, stopButton = createGui()
+
+-- Find by display or username
+local function findPlayerByPrefix(prefix)
+	prefix = prefix:lower()
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer then
+			if player.Name:lower():sub(1, #prefix) == prefix or player.DisplayName:lower():sub(1, #prefix) == prefix then
+				return player
+			end
+		end
+	end
+	return nil
+end
+
+-- Start orbiting
+local function attachToPlayer(target)
+	local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+	local root = character:WaitForChild("HumanoidRootPart")
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not root or not humanoid then return end
+
+	-- Clean up old stuff
+	if bodyPosition then bodyPosition:Destroy() end
+	if bodyGyro then bodyGyro:Destroy() end
+
+	bodyPosition = Instance.new("BodyPosition")
+	bodyPosition.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+	bodyPosition.P = 5e4
+	bodyPosition.D = 1e3
+	bodyPosition.Position = root.Position
+	bodyPosition.Parent = root
+
+	bodyGyro = Instance.new("BodyGyro")
+	bodyGyro.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
+	bodyGyro.P = 5e4
+	bodyGyro.CFrame = root.CFrame
+	bodyGyro.Parent = root
+
+	spinning = true
+	targetPlayer = target
+	stopButton.Visible = true
+
+	humanoid.AutoRotate = false
+end
+
+-- Stop orbit
+local function stopOrbit()
+	spinning = false
+	stopButton.Visible = false
+	targetPlayer = nil
+
+	local char = LocalPlayer.Character
+	if char then
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			humanoid.AutoRotate = true
+		end
+	end
+
+	if bodyPosition then bodyPosition:Destroy() bodyPosition = nil end
+	if bodyGyro then bodyGyro:Destroy() bodyGyro = nil end
+end
+
+stopButton.MouseButton1Click:Connect(stopOrbit)
+
+textBox.FocusLost:Connect(function(enterPressed)
+	if enterPressed then
+		local input = textBox.Text
+		textBox.Text = ""
+
+		if #input >= 3 then
+			local target = findPlayerByPrefix(input)
+			if target then
+				stopOrbit()
+				attachToPlayer(target)
+			else
+				textBox.PlaceholderText = "Player not found"
+			end
+		else
+			textBox.PlaceholderText = "Min 3 letters pls"
+		end
+	end
+end)
+
+-- Orbit update
+RunService.Heartbeat:Connect(function(dt)
+	if spinning and targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+		local myChar = LocalPlayer.Character
+		local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+		if not myRoot then return end
+
+		local targetRoot = targetPlayer.Character.HumanoidRootPart
+		rotation = rotation + dt * spinSpeed
+
+		local offset = Vector3.new(
+			math.cos(rotation) * orbitRadius,
+			0,
+			math.sin(rotation) * orbitRadius
+		)
+
+		local followPos = targetRoot.Position + offset
+		bodyPosition.Position = followPos
+		bodyGyro.CFrame = CFrame.new(followPos, targetRoot.Position)
+	end
+end)
+
+-- Resume orbit on respawn
+LocalPlayer.CharacterAdded:Connect(function()
+	task.wait(0.5)
+	if spinning and targetPlayer then
+		attachToPlayer(targetPlayer)
+	end
+end)
