@@ -36,6 +36,22 @@ local function createGui()
 	stopButton.Visible = false
 	stopButton.Parent = screenGui
 
+	local resetButton = Instance.new("TextButton")
+	resetButton.Size = UDim2.new(0, 100, 0, 40)
+	resetButton.Position = UDim2.new(0.5, -50, 0, 150)
+	resetButton.Text = "Force reset"
+	resetButton.TextScaled = true
+	resetButton.BackgroundColor3 = Color3.fromRGB(50, 50, 200)
+	resetButton.TextColor3 = Color3.new(1, 1, 1)
+	resetButton.Parent = screenGui
+
+	resetButton.MouseButton1Click:Connect(function()
+		local character = LocalPlayer.Character
+		if character then
+			character:BreakJoints()
+		end
+	end)
+
 	return textBox, stopButton
 end
 
